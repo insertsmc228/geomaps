@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geolocation API</title>
+    <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Lato', sans-serif;
+            background-color: #121212;
+            color: #e0e0e0;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        .form-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            margin-top: 20px;
+            background-color: #1e1e1e;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+        }
+
+        label, select, input, button {
+            margin: 10px 0;
+            width: 100%;
+            color: #e0e0e0;
+            background-color: #2c2c2c;
+            border: none;
+            border-radius: 5px;
+            padding: 10px;
+            font-size: 1rem;
+        }
+
+        button {
+            cursor: pointer;
+            background-color: #6200ee;
+            color: #ffffff;
+            font-weight: bold;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover {
+            background-color: #3700b3;
+        }
+
+        #map {
+            height: 60vh;
+            width: 100%;
+            max-width: 1000px;
+            margin-top: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+        }
+
+        @media (max-width: 600px) {
+            label, select, input, button {
+                font-size: 0.9rem;
+            }
+        }
+    </style>
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+</head>
+<body>
+
+<div class="form-container">
+    <label for="enb">Номер сайту:</label>
+    <input type="number" id="enb" placeholder="Наприклад, 942804">
+    
+    <label for="carrier">Виберіть оператора:</label>
+    <select id="carrier">
+        <option value="255-06-lifecell-11 21 31 19 29 39 12 22 32">lifecell</option>
+        <option value="255-03-kyivstar-21 22 23 31 32 33 51 52 53">Kyivstar</option>
+        <option value="255-01-vodafone-81 82 83 31 32 33 11 12 13">Vodafone</option>
+    </select>
+    
+    <button onclick="fetchCoordinates()">Дізнатися локацію</button>
+</div>
+
+<div id="map"></div>
+
+<script>
+    const API_KEY = "AIzaSyCEuMMkjCv8kMN3dB8yysNP4aoRCo1mQ8k";  // Replace with your actual Google API key
+    let map, markerGroup;
+
+    // Initialize OpenStreetMap
+    function initMap() {
+        map = L.map('map').setView([50.4501, 30.5234], 7);  // Default to Kyiv, Ukraine
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        markerGroup = L.layerGroup().addTo(map);
+    }
+
+    function fetchCoordinates() {
+        markerGroup.clearLayers(); // Clear previous markers
+        const enbValue = document.getElementById("enb").value;
+        const carrierInfo = document.getElementById("carrier").value;
+        const [mcc, mnc, carrier, sectors, band] = carrierInfo.split('-');
+        
+        if (!enbValue || isNaN(enbValue)) {
+            alert("Please enter a valid ENB value.");
+            return;
+        }
+
+        const sectorList = sectors.split(" ");
+        const promises = sectorList.map(sec => {
+            const cellId = parseInt(enbValue) * 256 + parseInt(sec);
+            const data = {
+                homeMobileCountryCode: parseInt(mcc),
+                homeMobileNetworkCode: parseInt(mnc),
+                radioType: "lte",
+                carrier: carrier,
+                considerIp: false,
+                cellTowers: [{
+                    cellId: cellId,
+                    mobileCountryCode: parseInt(mcc),
+                    mobileNetworkCode: parseInt(mnc)
+                }]
+            };
+
+            return fetch(`https://www.googleapis.com/geolocation/v1/geolocate?key=${API_KEY}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(data)
+            }).then(response => response.json());
+        });
+
+        Promise.all(promises)
+            .then(results => {
+                const coordinates = results.map(result => result.location).filter(Boolean);
+                
+                if (coordinates.length > 0) {
+                    let avgLatitude = 0, avgLongitude = 0;
+
+                    coordinates.forEach((location, index) => {
+                        const { lat, lng } = location;
+                        avgLatitude += lat;
+                        avgLongitude += lng;
+
+                        const marker = L.marker([lat, lng]).addTo(markerGroup)
+                            .bindPopup(`Сектор ${sectorList[index]}<br>${lat}<br>${lng}`);
+                        markerGroup.addLayer(marker);
+                    });
+
+                    avgLatitude /= coordinates.length;
+                    avgLongitude /= coordinates.length;
+
+                    const centerMarker = L.marker([avgLatitude, avgLongitude], { color: 'red' }).addTo(markerGroup)
+                        .bindPopup(`<br>Центр<br>${avgLatitude}<br>${avgLongitude}`).openPopup();
+
+                    map.setView([avgLatitude, avgLongitude], 12);
+                } else {
+                    alert("Інформація відсутня.");
+                }
+            })
+            .catch(error => console.error("Помилка отримання:", error));
+    }
+
+    window.onload = initMap;
+</script>
+
+</body>
+</html>
