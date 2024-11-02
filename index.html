@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -78,12 +79,10 @@
 <div class="form-container">
     <label for="enb">Номер сайту:</label>
     <input type="number" id="enb" placeholder="Наприклад, 942804">
-    
-    <label for="carrier">Виберіть оператора:</label>
     <select id="carrier">
-        <option value="255-06-lifecell-11 21 31 19 29 39 12 22 32">lifecell</option>
-        <option value="255-03-kyivstar-21 22 23 31 32 33 51 52 53">Kyivstar</option>
-        <option value="255-01-vodafone-81 82 83 31 32 33 11 12 13">Vodafone</option>
+        <option value="255-06-lifecell-11 21 31 19 29 39 12 22 32 13 23 33">lifecell</option>
+        <option value="255-03-kyivstar-21 22 23 31 32 33 51 52 53 41 42 43">Kyivstar</option>
+        <option value="255-01-vodafone-81 82 83 31 32 33 11 12 13 71 72 73">Vodafone</option>
     </select>
     
     <button onclick="fetchCoordinates()">Дізнатися локацію</button>
@@ -95,7 +94,6 @@
     const API_KEY = "AIzaSyBbLyIp8ZIg15zKiNiM7sIAoCFE5as8ztk";  // Replace with your actual Google API key
     let map, markerGroup;
 
-    // Initialize OpenStreetMap
     function initMap() {
         map = L.map('map').setView([50.4501, 30.5234], 7);  // Default to Kyiv, Ukraine
 
@@ -137,28 +135,29 @@
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(data)
-            }).then(response => response.json());
+            }).then(response => response.json())
+              .then(result => ({ sector: sec, location: result.location }))
+              .catch(() => null);
         });
 
         Promise.all(promises)
             .then(results => {
-                const coordinates = results.map(result => result.location).filter(Boolean);
-                
-                if (coordinates.length > 0) {
+                const validResults = results.filter(result => result && result.location);
+                if (validResults.length > 0) {
                     let avgLatitude = 0, avgLongitude = 0;
 
-                    coordinates.forEach((location, index) => {
-                        const { lat, lng } = location;
+                    validResults.forEach(result => {
+                        const { lat, lng } = result.location;
                         avgLatitude += lat;
                         avgLongitude += lng;
 
                         const marker = L.marker([lat, lng]).addTo(markerGroup)
-                            .bindPopup(`Сектор ${sectorList[index]}<br>${lat}<br>${lng}`);
+                            .bindPopup(`Сектор ${result.sector}<br>${lat}<br>${lng}`);
                         markerGroup.addLayer(marker);
                     });
 
-                    avgLatitude /= coordinates.length;
-                    avgLongitude /= coordinates.length;
+                    avgLatitude /= validResults.length;
+                    avgLongitude /= validResults.length;
 
                     const centerMarker = L.marker([avgLatitude, avgLongitude], { color: 'red' }).addTo(markerGroup)
                         .bindPopup(`<br>Центр<br>${avgLatitude}<br>${avgLongitude}`).openPopup();
@@ -173,6 +172,7 @@
 
     window.onload = initMap;
 </script>
+
 
 </body>
 </html>
